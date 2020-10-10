@@ -34,7 +34,7 @@ for i in range(int(6e4)):
         if with_L:
             u.append(cbf_microgrid_v1(env, node =node, dV =  1.5, eta_1= .5, eta_2=.5))
         else:
-            u.append(cbf_microgrid_v0(env, node =node, dV =  1.5, eta_1= .5, eta_2=.5))
+            u.append(cbf_microgrid_v0(env, node =node, dV =  1.5, eta_1= .9, eta_2=.9))
         #u=cbf_3(env, dV =  1, eta_1= env.R*env.T/env.L, eta_2=env.R*env.T/env.L)
         #print(u)
     s, r, _, _ = env.step(u)
