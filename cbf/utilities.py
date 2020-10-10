@@ -75,7 +75,39 @@ def cbf_3(env, dV = 5, G_diss = 0.02, eta_1= 0.5, eta_2=0.5):
     return u_bar[0]
 
 
+def cbf_microgrid(env, node, dV = 5, G_diss = 0.02, eta_1= 0.5, eta_2=0.5):
+    
+    V_l = env.Vdes[node] - dV
+    V_h = env.Vdes[node] + dV
+    P = matrix(np.diag([0.0, 1e24, 1e24]), tc='d')
+    q = matrix(np.zeros(3))
+    delta_1 = eta_1*env.L[node][node]/env.T
+    delta_2 = eta_2*env.L[node][node]/env.T
 
+    # I = env.state[0]
+    # V = env.state[1]
+    I = env.state[0+node]
+    V = env.state[8+node]
+
+    c_l = -V - delta_1*env.G[node][node]*V_l - (env.R[node][node] - delta_1)*I
+    c_h =  V + delta_2*env.G[node][node]*V_h + (env.R[node][node] - delta_2)*I
+    
+    #print(c)
+
+    G = np.array([[-env.Vs[node], 1, 0], [env.Vs[node], 0, -1], [-1, 0, 0], [1, 0, 0]])
+    G = matrix(G,tc='d')
+    h = np.array([c_l, c_h, 0, 1])
+    h = np.squeeze(h).astype(np.double)
+    h = matrix(h,tc='d')
+
+    solvers.options['show_progress'] = False
+    sol = solvers.qp(P, q, G, h)
+
+    u_bar = sol['x']
+    if np.abs(u_bar[1]) > 0.001:
+        print("Violation of Safety: ")
+        print(u_bar[1])
+    return u_bar[0]
 
 
 def plot_signals(data, Ides, Vdes, dt = 1e-5, dv = 1):
