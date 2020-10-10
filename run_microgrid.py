@@ -14,9 +14,9 @@ from models.buck_microgrid import Buck_microgrid_v0, Buck_microgrid_v1
 
 with_L = False
 if with_L:
-    env = Buck_microgrid_v1()
+    env = Buck_microgrid_v1(dt = 1e-6)
 else:
-    env = Buck_microgrid_v0()
+    env = Buck_microgrid_v0(dt = 1e-6)
 
 env.reset()
 print(env.state)
