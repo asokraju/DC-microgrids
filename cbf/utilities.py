@@ -109,6 +109,41 @@ def cbf_microgrid_v0(env, node, dV = 5, G_diss = 0.02, eta_1= 0.5, eta_2=0.5):
         print(u_bar[1])
     return u_bar[0]
 
+def cbf_microgrid_dist_v0(env, node, u_dist, dV = 5, G_diss = 0.02, eta_1= 0.5, eta_2=0.5):
+    
+    V_l = env.Vdes[node] - dV
+    V_h = env.Vdes[node] + dV
+    P = matrix(np.diag([1.0, 1e24, 1e24]), tc='d')
+    q = matrix(np.zeros(3))
+    delta_1 = eta_1*env.L[node][node]/env.T
+    delta_2 = eta_2*env.L[node][node]/env.T
+
+    # I = env.state[0]
+    # V = env.state[1]
+    I = env.state[0+node]
+    V = env.state[8+node]
+
+    c_l = -V - u_dist[node] - delta_1*env.G[node][node]*V_l - (env.R[node][node] - delta_1)*I
+    c_h =  V + u_dist[node] +  delta_2*env.G[node][node]*V_h + (env.R[node][node] - delta_2)*I
+    u_cl = -u_dist[node] 
+    u_ch = u_dist[node] + env.Vs[node]
+    #print(c)
+
+    G = np.array([[-1, 1, 0], [1, 0, -1], [-1, 0, 0], [1, 0, 0]])
+    G = matrix(G,tc='d')
+    h = np.array([c_l, c_h, u_cl, u_ch])
+    h = np.squeeze(h).astype(np.double)
+    h = matrix(h,tc='d')
+
+    solvers.options['show_progress'] = False
+    sol = solvers.qp(P, q, G, h)
+
+    u_bar = sol['x']
+    if np.abs(u_bar[1]) > 0.001:
+        print("Violation of Safety: ")
+        print(u_bar[1])
+    return u_bar[0]
+
 def cbf_microgrid_v1(env, node, dV = 5, G_diss = 0.02, eta_1= 0.5, eta_2=0.5):
     
     V_l = env.Vdes[node] - dV
