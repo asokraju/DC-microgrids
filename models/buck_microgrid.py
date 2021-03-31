@@ -7,11 +7,22 @@ import gym
 from gym import spaces
 import matplotlib.pyplot as plt
 
+# Imports
+import networkx
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+import gym
+from gym import spaces
+import matplotlib.pyplot as plt
+import pickle
+
 class Buck_microgrid_v0(gym.Env):
     """
     Buck converter model following gym interface
     We are assuming that the switching frequency is very High
     Action space is continious
+    v0: Transmission line has inductances
     """ 
     metadata = {'render.modes': ['console']}
 
@@ -27,14 +38,14 @@ class Buck_microgrid_v0(gym.Env):
         #self.Rt = np.diag(np.array([7, 5, 8, 6])*1e-2)
         
         
-        self.Vs = np.array([400, 410, 420, 390])
+        self.Vs = np.array([400, 400, 400, 400])
         self.L = np.diag(np.array([1.8, 2.0, 3.0, 2.2])*1e-3)
         self.C = np.diag(np.array([2.2, 1.9, 2.5, 1.7])*1e-3)
         self.R = np.diag(np.array([1.5, 2.3, 1.7, 2.1])*0.01)
         self.G = np.diag(1/np.array([16.7, 50.0, 16.7, 20.0]))
         self.G_true = np.diag(1/np.array([16.7, 50.0, 16.7, 20.0]))
         self.Lt = np.diag(np.array([2.1, 2., 3., 2.2])*1e-4)
-        self.Rt = np.diag(np.array([7.0, 5.0, 8.0, 6.0])*1e-3)
+        self.Rt = np.diag(np.array([7.0, 5.0, 8.0, 6.0])*1e-3) 
         """
         W = inv(diag([0.4 0.2 0.15 0.25]));
         D = 100*[1 -1 0 0; -1 2 -1 0; 0 -1 2 -1; 0 0 -1 1];
@@ -220,6 +231,12 @@ class Buck_microgrid_v0(gym.Env):
             plt.savefig(savefig_filename)
         else:
             plt.show()
+    def data(self):
+        data = dict(a=self.action_trajectory, 
+                    s=self.state_trajectory,
+                    a_des=self.action_des,
+                    s_des=self.desired)
+        return data
             
 
 class Buck_microgrid_v1(gym.Env):
@@ -227,6 +244,7 @@ class Buck_microgrid_v1(gym.Env):
     Buck converter model following gym interface
     We are assuming that the switching frequency is very High
     Action space is continious
+    v1: No Line inductances
     """ 
     metadata = {'render.modes': ['console']}
 
@@ -250,6 +268,9 @@ class Buck_microgrid_v1(gym.Env):
         self.G_true = np.diag(1/np.array([16.7, 50.0, 16.7, 20.0]))
         self.Lt = np.diag(np.array([2.1, 2., 3., 2.2])*1e-4)
         self.Rt = np.diag(np.array([7.0, 5.0, 8.0, 6.0])*1e-2)
+
+        self.Li = np.linalg.inv(self.L)
+        self.Ci = np.linalg.inv(self.C)
         """
         W = inv(diag([0.4 0.2 0.15 0.25]));
         D = 100*[1 -1 0 0; -1 2 -1 0; 0 -1 2 -1; 0 0 -1 1];
@@ -280,7 +301,7 @@ class Buck_microgrid_v1(gym.Env):
         self.T = dt
 
         #the steady-state equilibrium of the system is
-        self.Vdes = np.array([230, 230, 230, 230])
+        self.Vdes = np.array([230, 230.1, 230.2, 229.9])
         self.Itdes = -np.dot(np.linalg.inv(self.Rt), np.dot(self.inc_mat.T, self.Vdes))
         self.Ides = np.dot(self.G, self.Vdes) - np.dot(self.inc_mat, self.Itdes)
 
@@ -307,7 +328,18 @@ class Buck_microgrid_v1(gym.Env):
         self.observation_space = spaces.Box(low = low_obs, high = high_obs, dtype=np.float64)
         
         self._get_state()
-    
+    def compute_desired(self):
+        #the steady-state equilibrium of the system is
+        self.Vdes = np.array([230, 230.1, 230.2, 229.9])
+        self.Itdes = -np.dot(np.linalg.inv(self.Rt), np.dot(self.inc_mat.T, self.Vdes))
+        self.Ides = np.dot(self.G, self.Vdes) - np.dot(self.inc_mat, self.Itdes)
+
+        self.udes = (1/self.Vs) * (np.dot(self.R, self.Ides) + self.Vdes)
+        self.action_des = 2 * self.udes - 1
+        if any(self.Vs <= self.Vdes):
+            raise ValueError("for buck converter desired voltage should be less the source Voltage: Vdes < Vs ")
+        else:
+            return self.Vdes, self.Itdes, self.Ides, self.udes, self.action_des
     def _get_state(self):
         #initializing the state vector near to the desired values
         I = self.Ides#np.random.uniform(low = self.Ides-1, high = self.Ides+1)
@@ -334,6 +366,7 @@ class Buck_microgrid_v1(gym.Env):
         #self.state = np.array(np.random.normal([self.Ides , self.Vdes], 5)).astype(np.float32)
         self._get_state()
         self.G = self.G_true
+        self.compute_desired()
         return self.state
     
     def step(self, action):
@@ -345,10 +378,10 @@ class Buck_microgrid_v1(gym.Env):
         v = self.state[4:8]
 
         didt = np.dot(self.R, i) + v - u*self.Vs
-        didt = -np.dot(np.linalg.inv(self.L), didt)
+        didt = -np.dot(self.Li, didt)
 
         dvdt = i - np.dot(self.G + self.R_b, v)
-        dvdt = np.dot(np.linalg.inv(self.C), dvdt)
+        dvdt = np.dot(self.Ci, dvdt)
 
 
 
@@ -429,4 +462,10 @@ class Buck_microgrid_v1(gym.Env):
             plt.savefig(savefig_filename)
         else:
             plt.show()
-            
+    def data(self):
+        data = dict(a=self.action_trajectory, 
+                    s=self.state_trajectory,
+                    a_des=self.udes,
+                    s_des=self.desired(),
+                    dt=self.T)
+        return data
